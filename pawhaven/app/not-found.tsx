@@ -1,0 +1,1 @@
+export default function NotFound(){return <main className="container section"><div className="empty-state"><span className="eyebrow">A LITTLE DETOUR</span><h1>This path wandered off.</h1><p>Let’s get you back to the happy place.</p><a href="/" className="button green">Back to Petify</a></div></main>}

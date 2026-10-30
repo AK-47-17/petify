@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+const origin='http://127.0.0.1:8787',user='qa_business_'+crypto.randomUUID();
+const call=async(path,method='GET',data,identity='qa_admin',headers={})=>{const r=await fetch(origin+'/api/'+path,{method,headers:{...(identity?{'oai-authenticated-user-id':identity,'oai-authenticated-user-email':identity+'@example.test'}:{}),...(method!=='GET'?{'Content-Type':'application/json',Origin:origin,'Idempotency-Key':crypto.randomUUID()}:{}),...headers},...(data?{body:JSON.stringify(data)}:{})});return {status:r.status,body:await r.json()};};
+for(const route of ['admin/summary','admin/customers','admin/audit']){assert.equal((await call(route,'GET',undefined,null)).status,401);assert.equal((await call(route,'GET',undefined,user)).status,403);}
+const order={kind:'order',data:{name:'Business Test Customer',phone:'9876543210',city:'Bengaluru',address:'20 Sample Street Test Area',pincode:'560001',consent:true,items:[{id:'toy',quantity:2}]}};
+const created=await call('records','POST',order,user);assert.equal(created.status,201);const id=created.body.item.id;
+const detail=await call('admin/'+id);assert.equal(detail.body.items[0].customer.email,user+'@example.test');assert.equal(detail.body.items[0].owner,user);
+const operations={notes:'Private team note',assignedTo:'Test coordinator',paymentStatus:'paid',paidAmount:698,version:0};
+assert.equal((await call('admin/'+id+'/operations','PATCH',operations,user)).status,403);
+assert.equal((await call('admin/'+id+'/operations','PATCH',operations)).status,400,'Pending orders cannot record collection');
+assert.equal((await call('admin/'+id,'PATCH',{status:'confirmed',expectedStatus:'pending'})).status,200);
+assert.equal((await call('admin/'+id+'/operations','PATCH',operations)).status,200);
+assert.equal((await call('admin/'+id+'/operations','PATCH',operations)).status,409,'Stale version cannot overwrite');
+assert.equal((await call('admin/'+id+'/operations','PATCH',{...operations,version:1,notes:'Updated private note'})).status,200,'Second update must work');
+const updated=(await call('admin/'+id)).body.items[0];assert.equal(updated.operations.version,2);assert.equal(updated.operations.paidAmount,698);assert.equal(updated.operations.notes,'Updated private note');
+const own=await call('records','GET',undefined,user);assert.equal(own.body.items.find(r=>r.id===id).operations,undefined);assert.ok(!JSON.stringify(own).includes('Updated private note'));
+const customers=await call('admin/customers?q='+user);assert.equal(customers.body.total,1);assert.equal(customers.body.items[0].requests,1);
+const filtered=await call('admin?owner='+user+'&kind=order&status=confirmed');assert.equal(filtered.body.total,1);assert.equal(filtered.body.items[0].id,id);
+assert.ok((await call('admin/summary')).body.totals.orders>=1);assert.ok((await call('admin/summary')).body.payments.collected>=698);
+assert.ok((await call('admin/audit')).body.items.some(a=>a.record_id===id&&a.action.includes('Operations saved')));
+assert.equal((await call('admin?page=1.5')).status,200,'Fractional pagination is normalized');
+const pet=await call('records','POST',{kind:'pet',data:{name:'Test pet',species:'Dog',breed:'Indie',age:2,gender:'Male',weight:10,notes:''}},user);assert.equal(pet.status,201);
+assert.equal((await call('admin/'+pet.body.item.id+'/operations','PATCH',{notes:'Private pet note',assignedTo:'',paymentStatus:'unpaid',paidAmount:0,version:0})).status,200);
+assert.equal((await call('records/'+pet.body.item.id,'DELETE',{},user)).status,200,'Private operations cannot prevent deleting a saved pet');
+assert.equal((await call('auth/login','POST',{email:'test@example.test',password:'test-password'},null,{Origin:'https://evil.example'})).status,403);
+assert.equal((await call('auth/register','POST',{email:'test@example.test',password:'test-password-123',name:'Test',role:'admin'},null)).status,400);
+for(const route of ['/','/services','/shop','/adopt','/login','/register','/admin'])assert.equal((await fetch(origin+route)).status,200);
+console.log('PASS: admin permissions, customers, filtering, financial totals, private notes, audit trail, optimistic concurrency, anonymous browsing and auth CSRF');
