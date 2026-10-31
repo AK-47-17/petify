@@ -1,13 +1,14 @@
+import type { Database } from './database';
 import { z } from 'zod';
 import { ApiError, type Identity } from './auth';
 
-export async function rememberCustomer(db:D1Database,user:Identity) {
+export async function rememberCustomer(db:Database,user:Identity) {
  const now=new Date().toISOString();
  await db.prepare('INSERT INTO customers (id,email,name,provider,created_at,last_seen) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name,last_seen=excluded.last_seen').bind(user.userId,user.email,user.displayName,user.provider,now,now).run();
 }
 const mapped=(r:Record<string,unknown>)=>({id:r.id,owner:r.owner,kind:r.kind,data:JSON.parse(r.payload as string),status:r.status,amount:r.amount,createdAt:r.created_at,updatedAt:r.updated_at,customer:{name:r.customer_name||'',email:r.email||''},operations:{notes:r.notes||'',assignedTo:r.assigned_to||'',paymentStatus:r.payment_status||'unpaid',paidAmount:r.paid_amount||0,version:r.version||0}});
 const joined='FROM records r LEFT JOIN customers c ON c.id=r.owner LEFT JOIN record_operations o ON o.record_id=r.id';
-export async function adminRead(db:D1Database,url:URL) {
+export async function adminRead(db:Database,url:URL) {
  const section=url.pathname.split('/')[3];
  const page=Math.max(1,Math.min(100000,Math.trunc(Number(url.searchParams.get('page'))||1))),limit=25,offset=(page-1)*limit;
  if(section==='summary') {
@@ -36,14 +37,14 @@ export async function adminRead(db:D1Database,url:URL) {
  const {results}=await db.prepare('SELECT r.*,c.name AS customer_name,c.email,o.notes,o.assigned_to,o.payment_status,o.paid_amount,o.version '+joined+where+' ORDER BY r.created_at DESC,r.id LIMIT ? OFFSET ?').bind(...args,limit,offset).all<Record<string,unknown>>();
  return {items:results.map(mapped),total:count?.count||0,page,limit};
 }
-export async function updateOperations(db:D1Database,id:string,input:unknown,user:Identity) {
+export async function updateOperations(db:Database,id:string,input:unknown,user:Identity) {
  const data=z.object({notes:z.string().max(4000),assignedTo:z.string().trim().max(120),paymentStatus:z.enum(['unpaid','paid','refunded']),paidAmount:z.number().int().min(0).max(10000000),version:z.number().int().min(0)}).strict().parse(input);
  const record=await db.prepare('SELECT kind,status FROM records WHERE id=?').bind(id).first<{kind:string;status:string}>();if(!record)throw new ApiError(404,'Record not found.');
  if(data.paymentStatus==='unpaid'&&data.paidAmount!==0 || data.paymentStatus!=='unpaid'&&data.paidAmount<=0)throw new ApiError(400,'Enter the amount received or refunded. Unpaid records must have a zero amount.');
  if(data.paymentStatus!=='unpaid'&&(!['booking','order'].includes(record.kind)||['pending','declined'].includes(record.status)))throw new ApiError(400,'Confirm this booking or order before recording payment.');
  const now=new Date().toISOString();
  const result=await db.batch([
- db.prepare('INSERT INTO record_operations (record_id,notes,assigned_to,payment_status,paid_amount,version,updated_at) SELECT ?,?,?,?,?,1,? WHERE ?=0 OR EXISTS(SELECT 1 FROM record_operations WHERE record_id=? AND version=?) ON CONFLICT(record_id) DO UPDATE SET notes=?,assigned_to=?,payment_status=?,paid_amount=?,version=version+1,updated_at=? WHERE version=?').bind(id,data.notes,data.assignedTo,data.paymentStatus,data.paidAmount,now,data.version,id,data.version,data.notes,data.assignedTo,data.paymentStatus,data.paidAmount,now,data.version),
+ db.prepare('INSERT INTO record_operations (record_id,notes,assigned_to,payment_status,paid_amount,version,updated_at) SELECT ?,?,?,?,?,1,? WHERE ?=0 OR EXISTS(SELECT 1 FROM record_operations WHERE record_id=? AND version=?) ON CONFLICT(record_id) DO UPDATE SET notes=?,assigned_to=?,payment_status=?,paid_amount=?,version=record_operations.version+1,updated_at=? WHERE record_operations.version=?').bind(id,data.notes,data.assignedTo,data.paymentStatus,data.paidAmount,now,data.version,id,data.version,data.notes,data.assignedTo,data.paymentStatus,data.paidAmount,now,data.version),
  db.prepare('INSERT INTO audit_log (id,actor,action,record_id,created_at) SELECT ?,?,?,?,? WHERE changes()=1').bind(crypto.randomUUID(),user.userId,`Operations saved; payment ${data.paymentStatus}; amount INR ${data.paidAmount}; assignee ${data.assignedTo||'unassigned'}`,id,now)
  ]);if(!result[0].meta.changes)throw new ApiError(409,'Someone updated this record. Refresh before saving again.');
  return {ok:true};

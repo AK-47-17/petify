@@ -2,6 +2,12 @@
 
 Animated, responsive pet-care application inspired by the public service structure of thepetnest.com, with original branding, copy, layouts, illustrations and licensed stock photography.
 
+## Deploy to Vercel with Supabase
+
+Follow [VERCEL-SUPABASE-SETUP.md](VERCEL-SUPABASE-SETUP.md). Set the Vercel root directory to `pawhaven`; `vercel.json` selects `npm run build:vercel` and the Next.js `.next` output. Configure the Supabase database and email variables from `vercel.env.example`, and run the SQL migration in `supabase/migrations/` once in Supabase's SQL Editor. Do not use the SQLite files in `drizzle/` on Supabase.
+
+Use `npm run dev:vercel`, `npm run build:vercel`, and `npm run start:vercel` for the Next.js version. Vercel uses Supabase PostgreSQL plus verified email login; it never trusts ChatGPT identity headers. The original Cloudflare/Vinext commands below still use the Sites/D1 runtime. These are separate deployments; existing records are not automatically migrated between them.
+
 ## Run locally
 
 Requires Node 22.13+ and the installed dependencies. From this directory run `npm run dev`, then use the printed loopback URL. The starter supports Windows PowerShell. Sign in locally through `/signin-with-chatgpt?return_to=/account`; the development identity is a simulation, never included in production builds.
@@ -23,7 +29,7 @@ Run `npm test` for validation and security boundary tests, `npm run typecheck` f
 
 ## Backend and integration contract
 
-The frontend calls same-origin JSON endpoints. Cloudflare D1 stores durable records; the tracked hosting manifest declares `DB`. Catalog prices are centralized in `lib/catalog.ts` and imported independently by the server. Replace the catalog with authoritative business data before public launch.
+The frontend calls same-origin JSON endpoints. Sites uses Cloudflare D1; Vercel uses Supabase PostgreSQL through the server-only `DATABASE_URL`. Both implement the same database interface, with parameterized queries and transactions. Supabase tables live in a private `petify` schema with RLS enabled and browser-role access revoked. Catalog prices are centralized in `lib/catalog.ts` and imported independently by the server. Replace the catalog with authoritative business data before public launch.
 
 | Endpoint | Purpose |
 | --- | --- |

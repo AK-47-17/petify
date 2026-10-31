@@ -1,5 +1,17 @@
 # Verification — 31 October 2026
 
+## Vercel and Supabase update
+
+- Native Next.js production build passed and generated `.next/routes-manifest.json`, resolving the artifact missing from the reported Vercel build. Vercel now uses `npm run build:vercel`; the original Sites build remains available.
+- TypeScript checks and all 15 existing validation/authentication tests passed.
+- Six PostgreSQL integration tests passed using PGlite: migration reruns, schema/RLS restrictions, parameter handling, transaction rollback, ownership isolation, pricing/idempotency, administrator operations and version conflicts, private-field exclusion, customer aggregates, audit entries, rate limits, and CSRF. Auth provider responses are mocked in these tests.
+- Vercel production browser checks passed on desktop and 390px mobile: public browsing, separate account/admin gates, email-only login/registration, anonymous booking prompt, nonce CSP, and rejection of forged platform identity headers. No browser console/page errors or horizontal overflow were observed on the tested pages.
+- Original Cloudflare production build, 25-assertion API suite, and administrator integration suite passed after the database/runtime changes.
+- Production dependency audit reported **0 known vulnerabilities**. This is a point-in-time dependency check, not proof that the application has no vulnerabilities.
+- No hosted Supabase connection, actual signup/recovery email delivery, or Vercel deployment was performed. Those require the user's project configuration. Follow `VERCEL-SUPABASE-SETUP.md`; the included migration creates fresh tables and does not transfer existing Sites records.
+
+To reproduce the PostgreSQL checks, run `npm run test:postgres`. To reproduce the Vercel browser checks, build with `npm run build:vercel`, start `npm run start:vercel` on port 3000 without Supabase variables, and run `node tests/vercel-browser.mjs` with the browser dependency described below. These browser checks intentionally verify the unconfigured public storefront and authentication boundary.
+
 ## Administrator and email-account update
 
 - Final production build and TypeScript checks passed.

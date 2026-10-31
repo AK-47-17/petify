@@ -1,5 +1,7 @@
 # Enable email accounts for Petify
 
+**Deploying on Vercel?** Use [VERCEL-SUPABASE-SETUP.md](VERCEL-SUPABASE-SETUP.md), which includes PostgreSQL setup and the correct Vercel domain/environment settings. The steps below apply to the existing Sites deployment.
+
 The email login, registration, confirmation-code, password recovery and logout screens are implemented. Production email authentication remains disabled until a Supabase project is connected. ChatGPT sign-in remains available, including for the administrator.
 
 1. Create a Supabase project that you own. In **Authentication → Providers**, enable Email and **Confirm email**. Keep email confirmation enabled: administrator access relies on verified email ownership. Set the minimum password length to 12; enable leaked-password protection if available on your plan.

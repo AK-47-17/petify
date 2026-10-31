@@ -1,4 +1,5 @@
-import { env } from 'cloudflare:workers';
+import { env } from '@/lib/runtime';
+import { chatGPTAuthEnabled } from '@/lib/platform';
 import { z } from 'zod';
 import { getIdentity, isAdmin, emailAuthReady, handleAuth, ApiError } from '../../../lib/auth';
 import { adminRead, updateOperations, rememberCustomer } from '../../../lib/admin';
@@ -28,8 +29,9 @@ async function handle(req:Request){
  if(path[0]==='auth' && req.method==='POST'){guardOrigin(req);return await handleAuth(req,path[1],await body(req));}
  const user=await getIdentity(req);
  const admin=isAdmin(user);
- if(req.method==='GET' && path[0]==='session'){if(user&&env.DB)await rememberCustomer(env.DB,user);return json({user:user?{name:user.displayName,email:user.email,id:user.userId,admin,provider:user.provider}:null,emailAuthReady:emailAuthReady()});}
+ if(req.method==='GET' && path[0]==='session'){if(user&&env.DB)await rememberCustomer(env.DB,user);return json({user:user?{name:user.displayName,email:user.email,id:user.userId,admin,provider:user.provider}:null,emailAuthReady:emailAuthReady(),chatGPTAuthEnabled});}
  if(req.method==='GET' && path[0]==='catalog')return json({services,products});
+ if(path[0]!=='adoptions'&&!user)throw new ApiError(401,'Sign in to continue.');
  const db=env.DB;if(!db)throw new ApiError(503,'The service is temporarily unavailable. Please try again shortly.');
  if(req.method==='GET' && path[0]==='adoptions'){
   const {results}=await db.prepare("SELECT * FROM records WHERE kind='rehome' AND status='published' ORDER BY created_at DESC LIMIT 100").all<Row>();
@@ -46,7 +48,7 @@ async function handle(req:Request){
  if(!['POST','PATCH','DELETE'].includes(req.method))throw new ApiError(404,'Not found.');
  guardOrigin(req);
  const now=Date.now(),rateKey=user.userId+':write';
- const limit=await db.prepare('INSERT INTO rate_limits (key,count,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires<? THEN 1 ELSE count+1 END,expires=CASE WHEN expires<? THEN ? ELSE expires END RETURNING count').bind(rateKey,now+60000,now,now,now+60000).first<{count:number}>();
+ const limit=await db.prepare('INSERT INTO rate_limits (key,count,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN rate_limits.expires<? THEN 1 ELSE rate_limits.count+1 END,expires=CASE WHEN rate_limits.expires<? THEN ? ELSE rate_limits.expires END RETURNING count').bind(rateKey,now+60000,now,now,now+60000).first<{count:number}>();
  if((limit?.count||0)>20)throw new ApiError(429,'Too many requests. Please wait a minute.');
  await rememberCustomer(db,user);
  if(path[0]==='admin' && path[1] && path[2]==='operations' && req.method==='PATCH')return json(await updateOperations(db,path[1],await body(req),user));

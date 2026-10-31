@@ -1,4 +1,5 @@
-import { env } from 'cloudflare:workers';
+import { env } from '@/lib/runtime';
+import { clientAddress } from '@/lib/platform';
 import { z } from 'zod';
 import { getChatGPTUser } from '../app/chatgpt-auth';
 
@@ -6,7 +7,7 @@ type AuthEnvironment = { SUPABASE_URL?: string; SUPABASE_PUBLISHABLE_KEY?: strin
 export type Identity = { userId: string; email: string; displayName: string; provider: 'email' | 'chatgpt'; verified: boolean };
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const settings = () => env as unknown as AuthEnvironment;
-export function emailAuthReady() { const s=settings(); return !!(s.SUPABASE_URL && s.SUPABASE_PUBLISHABLE_KEY); }
+export function emailAuthReady() { const s=settings(); return !!(s.SUPABASE_URL && s.SUPABASE_PUBLISHABLE_KEY && env.DB); }
 const cookieName = (req: Request) => new URL(req.url).protocol === 'https:' ? '__Host-petify-session' : 'petify-local-session';
 function tokenFrom(req: Request) { return req.headers.get('cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName(req)+'='))?.slice(cookieName(req).length+1); }
 function sessionCookie(req: Request, token: string, seconds: number) { return `${cookieName(req)}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${seconds}${new URL(req.url).protocol === 'https:' ? '; Secure' : ''}`; }
@@ -27,11 +28,11 @@ export async function getIdentity(req: Request): Promise<Identity|null> {
 export function isAdmin(user: Identity|null) { const s=settings(); return !!user && ((s.ADMIN_USER_IDS||'').split(',').map(v=>v.trim()).includes(user.userId) || (user.verified && (s.ADMIN_EMAILS||'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean).includes(user.email.toLowerCase()))); }
 export async function authLimit(req: Request, email: string) {
  if(!env.DB)throw new ApiError(503,'Sign-in is temporarily unavailable.');
- const now=Date.now(); const ip=req.headers.get('cf-connecting-ip')||'local';
+ const now=Date.now(); const ip=clientAddress(req);
  for(const [value,max] of [[ip,40],[email.toLowerCase(),8]] as const) {
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
   const key='auth:'+Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
-  const r=await env.DB.prepare('INSERT INTO rate_limits (key,count,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires<? THEN 1 ELSE count+1 END,expires=CASE WHEN expires<? THEN ? ELSE expires END RETURNING count').bind(key,now+900000,now,now,now+900000).first<{count:number}>();
+  const r=await env.DB.prepare('INSERT INTO rate_limits (key,count,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN rate_limits.expires<? THEN 1 ELSE rate_limits.count+1 END,expires=CASE WHEN rate_limits.expires<? THEN ? ELSE rate_limits.expires END RETURNING count').bind(key,now+900000,now,now,now+900000).first<{count:number}>();
   if((r?.count||0)>max)throw new ApiError(429,'Too many sign-in attempts. Please try again in 15 minutes.');
  }
 }

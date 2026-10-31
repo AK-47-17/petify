@@ -3,16 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": "22.x"
   },
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
     "dev": "node scripts/run-framework.mjs dev",
     "build": "node scripts/run-framework.mjs build",
+    "build:vercel": "next build --webpack",
+    "dev:vercel": "next dev --webpack",
+    "start:vercel": "next start",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test": "node scripts/test.mjs",
+    "test:postgres": "node scripts/test-postgres.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,6 +33,7 @@
     "lucide-react": "^1.31.0",
     "next": "16.4.3",
     "next-themes": "^0.4.6",
+    "pg": "8.23.1",
     "radix-ui": "^1.6.7",
     "react": "19.3.1",
     "react-day-picker": "^10.0.1",
@@ -46,6 +51,8 @@
     "@cloudflare/workers-types": "5.20261030.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
+    "@types/pg": "8.23.1",
+    "@electric-sql/pglite": "0.5.13",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",

@@ -1,6 +1,8 @@
 import './business.css';
 import type { Metadata } from "next";
 import "./styles.css";
+// Per-response CSP nonces require dynamic HTML on Next.js.
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: "Petify — A happier life, together",
